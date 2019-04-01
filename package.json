@@ -9,7 +9,7 @@
     "preversion": "npm run lint",
     "postversion": "git push && git push --tags && npm run changelog && git push ",
     "postinstall": "",
-    "changelog": "rm CHANGELOG.md && changelog https://github.com/martinholden-skillsoft/node-percipio-report all > CHANGELOG.md && git add . && git commit . -m changelog && git push"
+    "changelog": "rimraf CHANGELOG.md && changelog https://github.com/martinholden-skillsoft/node-percipio-report all > CHANGELOG.md && git add . && git commit . -m changelog && git push"
   },
   "repository": {
     "type": "git",
@@ -40,6 +40,7 @@
     "chai": "~1.10.0",
     "changelog": "^1.0.7",
     "jshint": "^2.9.3",
-    "mocha": "^6.0.2"
+    "mocha": "^6.0.2",
+    "rimraf": "^2.6.3"
   }
 }
