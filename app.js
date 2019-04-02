@@ -15,7 +15,7 @@ var configOptions = require('./config');
 
 //Percipio Report API calls
 const submitReport = async (options) => promiseRetry(async (retry, numberOfRetries) => {
-    var requestParams = options.report.request || {};
+    var requestBody = options.report.request || {};
 
     var requestDefaults = {
         "sftpId" : null,
@@ -25,11 +25,11 @@ const submitReport = async (options) => promiseRetry(async (retry, numberOfRetri
     };
 
     // merge opt with default config
-    _.defaults(requestParams, requestDefaults);
+    _.defaults(requestBody, requestDefaults);
 
     // Remove any nulls
-    requestParams = _.omitBy(requestParams, _.isNil);
-    logger.debug( `Request Details: ${JSON.stringify(requestParams)}`, { label: 'submitReport'});
+    requestBody = _.omitBy(requestBody, _.isNil);
+    logger.debug( `Request Details: ${JSON.stringify(requestBody)}`, { label: 'submitReport'});
 
     requestUri = `${options.site.baseuri}/reporting/v1/organizations/${options.site.orgid}/report-requests/${options.report.type}`;
 
@@ -41,7 +41,7 @@ const submitReport = async (options) => promiseRetry(async (retry, numberOfRetri
             Authorization: `Bearer ${options.site.bearer}`
         },
         method: 'POST',
-        params: requestParams
+        data: requestBody
     };
 
     logger.debug( `Axios Config: ${JSON.stringify(axiosConfig)}`, { label: 'submitReport'});
