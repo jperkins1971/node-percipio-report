@@ -82,7 +82,11 @@ const getReport = async (options, reportid) => promiseRetry(async (retry, number
     try {
         const response = await axios.request(axiosConfig);
         logger.debug( `Response Headers: ${JSON.stringify(response.headers)}`, { label: 'getReport'});
-        return response.data;
+        if (_.isUndefined(response.data.status)) {
+            return response.data;
+        } else {
+            throw new Error(`Report ${response.data.reportId} status is ${response.data.status}`);
+        }
     } catch (err) {
         logger.warn( `ERROR: Trying to get report. Got Error after Attempt# ${numberOfRetries} : ${err}`, { label: 'getReport'});
         if (numberOfRetries < options.polling_options.retries + 1) {
