@@ -13,9 +13,9 @@ config.debug.fiddlerAddress = '127.0.0.1';
 config.debug.fiddlerPort = '8888';
 //Debug logging
 //One of the supported default logging levels for winston - see https://github.com/winstonjs/winston#logging-levels
-config.debug.loggingLevel = 'debug';
+//config.debug.loggingLevel = 'debug';
 config.debug.logpath = 'results/output';
-config.debug.logFile = `app.log`;
+config.debug.logFile = `${config.customer}.log`;
 
 
 //Site
@@ -26,7 +26,7 @@ config.site.bearer = process.env.CUSTOMER_BEARER || null;
 //Path to save data
 config.output.path = 'results/output';
 //File name for the data
-config.output.fileName = 'learningActivity.json';
+config.output.fileName = `${config.customer}.json`;
 
 //Default Report Request Parameters to /reporting end point
 //Always create new object to override defaults, set any parameters to NULL that are not wanted
