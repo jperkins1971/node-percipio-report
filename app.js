@@ -85,10 +85,13 @@ const getReport = async (options, reportid) => promiseRetry(async (retry, number
         if (_.isUndefined(response.data.status)) {
             return response.data;
         } else {
-            throw new Error(`Report ${response.data.reportId} status is ${response.data.status}`);
+            var error = new Error(`Report ${response.data.reportId} status is ${response.data.status}`); 
+            error.response = response;
+            throw error;
         }
     } catch (err) {
         logger.warn( `ERROR: Trying to get report. Got Error after Attempt# ${numberOfRetries} : ${err}`, { label: 'getReport'});
+        logger.debug( `Response Headers: ${JSON.stringify(err.response.headers)}`, { label: 'getReport'});
         if (numberOfRetries < options.polling_options.retries + 1) {
             retry(err);
         } else {

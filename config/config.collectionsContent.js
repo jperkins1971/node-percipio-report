@@ -1,6 +1,6 @@
 ﻿var config = require('./config.global');
 
-config.customer = 'contentAccess';
+config.customer = 'collectionsContent';
 
 //Debug logging
 //One of the supported default logging levels for winston - see https://github.com/winstonjs/winston#logging-levels
@@ -32,19 +32,23 @@ config.output.fileName = `${config.customer}.json`;
 //Always create new object to override defaults, set any parameters to NULL that are not wanted
 config.report = {};
 //This is the report type
-config.report.type = 'content-access'
+config.report.type = 'collections-content'
 config.report.request = {};
-config.report.request.start = '2018-03-09T00:00:01Z';
-config.report.request.end =  '2019-03-01T00:00:02Z';
-config.report.request.timeframe = null;
-config.report.request.audience = null;
-config.report.request.locale = null;
+
+//Parse from JSON
+var reportRequest = '{ "collectionName": "ALL", "sort" : { "field" : "collection", "order" : "asc"} }';
+config.report.request = JSON.parse(reportRequest);
+
+//Set individually
+/*
 config.report.request.collectionName = null;
-config.report.request.assetTypes = null;
 config.report.request.sort = {};
-config.report.request.sort.field = 'totalAccesses';
+config.report.request.sort.field = 'collection';
 config.report.request.sort.order = 'desc';
-config.report.request.status = null;
+config.report.request.contentType = null;
+config.report.request.status = null; 
+config.report.request.locale = null; 
+*/
 
 //Polling options for retrying report availability
 //see https://github.com/IndigoUnited/node-promise-retry#readme
