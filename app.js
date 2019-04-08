@@ -1,201 +1,305 @@
+/*
+eslint linebreak-style: ["error", "windows"]
+*/
+
 const axios = require('axios');
 const fs = require('fs');
 const Path = require('path');
 const _ = require('lodash');
 const promiseRetry = require('promise-retry');
 const globalTunnel = require('global-tunnel-ng');
+// eslint-disable-next-line no-unused-vars
 const pkginfo = require('pkginfo')(module);
 
 const { transports } = require('winston');
+const logger = require('./lib/logger');
+const myutil = require('./lib/util');
+const configuration = require('./config');
 
-var logger = require('./lib/logger');
-var myutil = require('./lib/util');
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-var configOptions = require('./config');
-
-//Percipio Report API calls
-const submitReport = async (options) => promiseRetry(async (retry, numberOfRetries) => {
-    var requestBody = options.report.request || {};
-
-    var requestDefaults = {
-        "sftpId" : null,
-        "fileMask" : null,
-        "folderName": null,
-        "formatType": "JSON"
+/**
+ * Submit the report request
+ *
+ * @param {*} options
+ * @returns
+ */
+const submitReport = async options => {
+  return promiseRetry(async (retry, numberOfRetries) => {
+    const loggingOptions = {
+      label: 'submitReport'
     };
 
-    // merge opt with default config
-    _.defaults(requestBody, requestDefaults);
+    let requestBody = options.report.request || {};
 
     // Remove any nulls
     requestBody = _.omitBy(requestBody, _.isNil);
-    logger.debug( `Request Details: ${JSON.stringify(requestBody)}`, { label: 'submitReport'});
+    logger.debug(`Request Details: ${JSON.stringify(requestBody)}`, loggingOptions);
 
-    requestUri = `${options.site.baseuri}/reporting/v1/organizations/${options.site.orgid}/report-requests/${options.report.type}`;
+    if (!_.isUndefined(requestBody.timeframe)) {
+      // Log the timeframe info
+      logger.info(
+        `Utilising timeframe: ${requestBody.timeframe} Calculated Start: ${myutil.getStartDate(
+          requestBody.timeframe
+        )} Calculated End: ${myutil.getEndDate(requestBody.timeframe)}`,
+        loggingOptions
+      );
+    }
 
-    logger.debug( `Request URI: ${requestUri}`, { label: 'submitReport'});
+    const requestUri = `${options.site.baseuri}/reporting/v1/organizations/${
+      options.site.orgid
+    }/report-requests/${options.report.type}`;
+
+    logger.debug(`Request URI: ${requestUri}`, loggingOptions);
 
     const axiosConfig = {
-        url: requestUri,
-        headers: {
-            Authorization: `Bearer ${options.site.bearer}`
-        },
-        method: 'POST',
-        data: requestBody
+      url: requestUri,
+      headers: {
+        Authorization: `Bearer ${options.site.bearer}`
+      },
+      method: 'POST',
+      data: requestBody
     };
 
-    logger.debug( `Axios Config: ${JSON.stringify(axiosConfig)}`, { label: 'submitReport'});
-
+    logger.debug(`Axios Config: ${JSON.stringify(axiosConfig)}`, loggingOptions);
 
     try {
-        const response = await axios.request(axiosConfig);
-        logger.debug( `Response Headers: ${JSON.stringify(response.headers)}`, { label: 'submitReport'});
+      const response = await axios.request(axiosConfig);
+      logger.debug(`Response Headers: ${JSON.stringify(response.headers)}`, loggingOptions);
+      logger.debug(`Response Body: ${JSON.stringify(response.data)}`, loggingOptions);
+
+      if (!_.isUndefined(response.data.status) && response.data.status !== 'FAILED') {
         return response.data;
+      }
+
+      const error = new Error(`Report ${response.data.id} status is ${response.data.status}`);
+      error.response = response;
+      throw error;
     } catch (err) {
-        logger.warn( `ERROR: Trying to get report. Got Error after Attempt# ${numberOfRetries} : ${err}`, { label: 'submitReport'});
-        if (numberOfRetries < options.retry_options.retries + 1) {
-            retry(err);
-        } else {
-            logger.fatal( 'ERROR: DONE Trying to get report', { label: 'submitReport'});
-        }
-        throw err;
+      logger.warn(
+        `Trying to get report. Got Error after Attempt# ${numberOfRetries} : ${err}`,
+        loggingOptions
+      );
+      if (err.response) {
+        logger.debug(`Response Headers: ${JSON.stringify(err.response.headers)}`, loggingOptions);
+        logger.debug(`Response Body: ${JSON.stringify(err.response.data)}`, loggingOptions);
+      } else {
+        logger.debug('No Response Object available', loggingOptions);
+      }
+      if (numberOfRetries < options.retry_options.retries + 1) {
+        retry(err);
+      } else {
+        logger.error('Failed to request report', loggingOptions);
+      }
+      throw err;
     }
-
-}, configOptions.retry_options);
-
-const getReport = async (options, reportid) => promiseRetry(async (retry, numberOfRetries) => {
-    requestUri = `${options.site.baseuri}/reporting/v1/organizations/${options.site.orgid}/report-requests/${reportid}`;
-
-    logger.debug(`Request URI: ${requestUri}`, { label: 'getReport'});
-
-    const axiosConfig = {
-        url: requestUri,
-        headers: {
-            Authorization: `Bearer ${options.site.bearer}`
-        },
-        method: 'GET'
-    };
-
-    logger.debug(`Axios Config: ${JSON.stringify(axiosConfig)}`, { label: 'getReport'});
-
-
-    try {
-        const response = await axios.request(axiosConfig);
-        logger.debug( `Response Headers: ${JSON.stringify(response.headers)}`, { label: 'getReport'});
-        if (_.isUndefined(response.data.status)) {
-            return response.data;
-        } else {
-            var error = new Error(`Report ${response.data.reportId} status is ${response.data.status}`); 
-            error.response = response;
-            throw error;
-        }
-    } catch (err) {
-        logger.warn( `ERROR: Trying to get report. Got Error after Attempt# ${numberOfRetries} : ${err}`, { label: 'getReport'});
-        logger.debug( `Response Headers: ${JSON.stringify(err.response.headers)}`, { label: 'getReport'});
-        if (numberOfRetries < options.polling_options.retries + 1) {
-            retry(err);
-        } else {
-            logger.fatal( 'ERROR: DONE Trying to get report', { label: 'getReport'});
-        }
-        throw err;
-    }
-
-}, configOptions.polling_options);
-
-
-const main = async (options) => {
-
-    //Create logging folder if one does not exist
-    if (!_.isNull(options.debug.logpath)) {
-        if (!fs.existsSync(options.debug.logpath)) {
-            myutil.makeFolder(options.debug.logpath);
-        }
-    }
-
-    logger.info(`Start ${module.exports.name}`, { label: 'main'});
-
-    logger.level = options.debug.loggingLevel;
-
-    //Add log file for none dev, and set logging to silly level for dev
-    if (NODE_ENV != 'development') {
-        logger.add(new transports.File({ filename:  Path.join(options.debug.logpath, options.debug.logFile), options: { flags: 'w' } }));
-    } else {
-        logger.level = 'silly';
-    }
-
-    logger.debug(`Options: ${JSON.stringify(options)}`, { label: 'main'});
-
-    options = options || null;
-
-    //For PRODUCTION you would want to remove this
-    if (options.debug.checkFiddler) {
-        logger.info('Checking if Fiddler is running', { label: 'main'});
-        var result = await myutil.isFiddlerRunning(options.debug.fiddlerAddress, options.debug.fiddlerPort);
-        if (result) {
-            logger.info('Setting Proxy Configuration so requests are sent via Fiddler', { label: 'main'});
-
-            process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
-
-            globalTunnel.initialize({
-                host: options.debug.fiddlerAddress,
-                port: options.debug.fiddlerPort
-            });
-        }
-    } else {
-        //Use the process.env.http_proxy and https_proxy
-        globalTunnel.initialize();
-    }
-
-
-    if (_.isNull(options)) {
-        logger.error('Invalid configuration make sure to set env CUSTOMER', { label: 'main'});
-        return false;
-    }
-
-    if (_.isNull(options.site.orgid)) {
-        logger.error('Invalid configuration - no orgid in config file or set env CUSTOMER_ORGID', { label: 'main'});
-        return false;
-    }
-
-    if (_.isNull(options.site.bearer)) {
-        logger.error('Invalid configuration - no bearer or set env CUSTOMER_BEARER', { label: 'main'});
-        return false;
-    }
-
-    //Create output folder if one does not exist
-    if (!_.isNull(options.output.path)) {
-        if (!fs.existsSync(options.output.path)) {
-            myutil.makeFolder(options.output.path);
-            logger.info(`Created output directory ${options.output.path}`, { label: 'main'});
-        }
-    }
-    
-    logger.info('Report Request Submitted', { label: 'main'});
-    source = await submitReport(options);
-    logger.info(`Report Id: ${source.id}`, { label: 'main'});
-    logger.debug(`Response: ${JSON.stringify(source)}`, { label: 'main'});
-
-    logger.info('Report Poll Submitted', { label: 'main'});
-    response = await getReport(options, source.id);
-    logger.info(`Report Retrieved. Records: ${response.length}`, { label: 'main'});
-    logger.debug(`Response: ${JSON.stringify(response)}`, { label: 'main'});
-
-    var outputFilename = options.output.fileName;
-
-    if (!_.isNull(options.output.path)) {
-        outputFilename = Path.join(options.output.path, outputFilename);
-    }
-
-    if (fs.existsSync(outputFilename)) {
-        fs.unlinkSync(outputFilename);
-        logger.debug(`Deleted old data. Filename: ${outputFilename}`, { label: 'main'});
-    }
-
-    fs.writeFileSync(outputFilename, JSON.stringify(response));
-    logger.info(`JSON written to ${outputFilename}`, { label: 'main'});
-
+  }, options.retry_options);
 };
 
+/**
+ * Poll for the sepcified reportid, the polling uses the promisRetry
+ * confguration defined in config.polling_options
+ *
+ * @param {*} options
+ * @param {*} reportid
+ * @returns
+ */
+const pollForReport = async (options, reportid) => {
+  return promiseRetry(async (retry, numberOfRetries) => {
+    const loggingOptions = {
+      label: 'pollForReport'
+    };
 
-var NODE_ENV = process.env.NODE_ENV || 'development';
-main(configOptions);
+    const requestUri = `${options.site.baseuri}/reporting/v1/organizations/${
+      options.site.orgid
+    }/report-requests/${reportid}`;
+
+    logger.debug(`Request URI: ${requestUri}`, loggingOptions);
+
+    const axiosConfig = {
+      url: requestUri,
+      headers: {
+        Authorization: `Bearer ${options.site.bearer}`
+      },
+      method: 'GET'
+    };
+
+    logger.debug(`Axios Config: ${JSON.stringify(axiosConfig)}`, loggingOptions);
+
+    try {
+      const response = await axios.request(axiosConfig);
+      logger.debug(`Response Headers: ${JSON.stringify(response.headers)}`, loggingOptions);
+      logger.debug(`Response Body: ${JSON.stringify(response.data)}`, loggingOptions);
+
+      if (_.isUndefined(response.data.status)) {
+        return response.data;
+      }
+      const error = new Error(`Report ${response.data.reportId} status is ${response.data.status}`);
+      error.response = response;
+      throw error;
+    } catch (err) {
+      logger.warn(
+        `Trying to get report. Got Error after Attempt# ${numberOfRetries} : ${err}`,
+        loggingOptions
+      );
+      if (err.response) {
+        logger.debug(`Response Headers: ${JSON.stringify(err.response.headers)}`, loggingOptions);
+        logger.debug(`Response Body: ${JSON.stringify(err.response.data)}`, loggingOptions);
+      } else {
+        logger.debug('No Response Object available', loggingOptions);
+      }
+      if (numberOfRetries < options.polling_options.retries + 1) {
+        retry(err);
+      } else {
+        logger.error('Failed to retrieve report', loggingOptions);
+      }
+      throw err;
+    }
+  }, options.polling_options);
+};
+
+/**
+ * Process the report submit, polling and save the results
+ *
+ * @param {*} options
+ * @returns
+ */
+const main = async configOptions => {
+  const loggingOptions = {
+    label: 'main'
+  };
+
+  const options = configOptions || null;
+
+  if (_.isNull(options)) {
+    logger.error('Invalid configuration', loggingOptions);
+    return false;
+  }
+
+  // Set logging to silly level for dev
+  if (NODE_ENV.toUpperCase() === 'DEVELOPMENT') {
+    logger.level = 'silly';
+  } else {
+    logger.level = options.debug.loggingLevel;
+  }
+
+  // Create logging folder if one does not exist
+  if (!_.isNull(options.debug.logpath)) {
+    if (!fs.existsSync(options.debug.logpath)) {
+      myutil.makeFolder(options.debug.logpath);
+    }
+  }
+
+  // Add logging to a file
+  logger.add(
+    new transports.File({
+      filename: Path.join(options.debug.logpath, options.debug.logFile),
+      options: {
+        flags: 'w'
+      }
+    })
+  );
+
+  logger.info(`Start ${module.exports.name}`, loggingOptions);
+
+  logger.debug(`Options: ${JSON.stringify(options)}`, loggingOptions);
+
+  if (options.debug.checkFiddler) {
+    logger.info('Checking if Fiddler is running', loggingOptions);
+
+    const result = await myutil.isFiddlerRunning(
+      options.debug.fiddlerAddress,
+      options.debug.fiddlerPort
+    );
+
+    if (result) {
+      logger.info('Setting Proxy Configuration so requests are sent via Fiddler', loggingOptions);
+
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
+
+      globalTunnel.initialize({
+        host: options.debug.fiddlerAddress,
+        port: options.debug.fiddlerPort
+      });
+    }
+  } else {
+    // Use the process.env.http_proxy and https_proxy
+    globalTunnel.initialize();
+  }
+
+  if (_.isNull(options.site.orgid)) {
+    logger.error(
+      'Invalid configuration - no orgid in config file or set env CUSTOMER_ORGID',
+      loggingOptions
+    );
+    return false;
+  }
+
+  if (_.isNull(options.site.bearer)) {
+    logger.error('Invalid configuration - no bearer or set env CUSTOMER_BEARER', loggingOptions);
+    return false;
+  }
+
+  // Create output folder if one does not exist
+  if (!_.isNull(options.output.path)) {
+    if (!fs.existsSync(options.output.path)) {
+      myutil.makeFolder(options.output.path);
+      logger.info(`Created output directory ${options.output.path}`, loggingOptions);
+    }
+  }
+
+  submitReport(options)
+    .then(submitResponse => {
+      logger.info(`Report Id: ${submitResponse.id}`, loggingOptions);
+      logger.info('Report Poll Submitted', loggingOptions);
+
+      pollForReport(options, submitResponse.id)
+        .then(response => {
+          let outputFilename = options.output.fileName;
+
+          if (
+            _.isUndefined(options.report.request.formatType) ||
+            options.report.request.formatType === 'JSON'
+          ) {
+            logger.info(`Report Retrieved. Records: ${response.length}`, loggingOptions);
+            logger.debug(`Response: ${JSON.stringify(response)}`, loggingOptions);
+
+            if (!_.isNull(options.output.path)) {
+              outputFilename = Path.join(options.output.path, outputFilename);
+            }
+
+            if (fs.existsSync(outputFilename)) {
+              fs.unlinkSync(outputFilename);
+              logger.debug(`Deleted old data. Filename: ${outputFilename}`, loggingOptions);
+            }
+
+            fs.writeFileSync(outputFilename, JSON.stringify(response));
+            logger.info(`JSON written to ${outputFilename}`, loggingOptions);
+          } else {
+            logger.info('Report Retrieved.', loggingOptions);
+            logger.debug(`Response: ${response}`, loggingOptions);
+
+            if (!_.isNull(options.output.path)) {
+              outputFilename = Path.join(options.output.path, outputFilename);
+            }
+
+            if (fs.existsSync(outputFilename)) {
+              fs.unlinkSync(outputFilename);
+              logger.debug(`Deleted old data. Filename: ${outputFilename}`, loggingOptions);
+            }
+
+            fs.writeFileSync(outputFilename, response);
+            logger.info(`Response written to ${outputFilename}`, loggingOptions);
+          }
+        })
+        .catch(err => {
+          logger.error(`Error:  ${err}`, loggingOptions);
+        });
+    })
+    .catch(err => {
+      logger.error(`Error:  ${err}`, loggingOptions);
+    });
+  return true;
+};
+
+main(configuration);
