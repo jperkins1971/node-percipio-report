@@ -1,6 +1,16 @@
+2019-04-08
+==========
+
+  * Upgrade to 1.2.0 due to refactoring for eslint and airbnb style
+  * Refactoring and eslint recommendations
+  * Eslint updates and added new date functions to util
+  * Enable eslint and airbnb style guide
+    Switch to eslint, with Airbnb's Javascript styleguide, and prettier config
+
 2019-04-03
 ==========
 
+  * changelog
   * 1.1.2
   * Merge branch 'development'
   * Updated config and better logging
