@@ -1,6 +1,7 @@
-﻿const config = require('./config.global');
+﻿const _ = require('lodash');
+const config = require('./config.global');
 
-config.customer = 'learningActivity';
+config.customer = 'entitlements';
 
 // Debug logging
 // One of the supported default logging levels for winston - see https://github.com/winstonjs/winston#logging-levels
@@ -25,44 +26,35 @@ config.site.bearer = process.env.CUSTOMER_BEARER || null;
 // Path to save data
 config.output.path = 'results/output';
 // File name for the data
-config.output.fileName = `${config.customer}.json`;
+config.output.fileName = `${config.customer}.csv`;
 
 // Default Report Request Parameters to /reporting end point
 // Always create new object to override defaults, set any parameters to NULL that are not wanted
 config.report = {};
 // This is the report type
-config.report.type = 'learning-activity';
+config.report.type = 'entitlements';
 config.report.request = {};
-
-// Parse from JSON
-// var reportRequest = "timeframe" : "CALENDAR_MONTH"
-
-const reportRequest =
-  '{ "timeframe" : "CALENDAR_MONTH", "sort" : { "field" : "firstAccessDate", "order" : "desc"}, "status" : "COMPLETED" }';
-config.report.request = JSON.parse(reportRequest);
-// Add some defaults
 config.report.request.sftpId = null;
 config.report.request.fileMask = null;
 config.report.request.folderName = null;
-config.report.request.formatType = 'JSON';
+config.report.request.formatType = 'CSV';
+
+// merge from a JSON object with config already set
+const reportRequest =
+  '{ "timeframe" : "DAY", "sort" : { "field" : "collection", "order" : "desc"} }';
+_.defaults(config.report.request, JSON.parse(reportRequest));
 
 // Set individually
 /*
 config.report.request.start = null;
 config.report.request.end =  null;
-config.report.request.timeframe = null;
 config.report.request.audience = null;
-config.report.request.locale = null;
-config.report.request.contentType = null;
+config.report.request.user = null;
+config.report.request.collection = null;
 config.report.request.sort = {};
-config.report.request.sort.field = 'lastAccessDate';
+config.report.request.sort.field = 'collection';
 config.report.request.sort.order = 'desc';
-config.report.request.status = null; 
-config.report.request.sftpId = null;
-config.report.request.fileMask = null;
-config.report.request.folderName = null;
-config.report.request.formatType = 'JSON';
-*/
+ */
 
 /*
 Polling options for retrying report availability
