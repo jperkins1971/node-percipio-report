@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "test": "mocha",
-    "lint": "jshint app.js test",
+    "lint": "eslint app.js lib config",
     "preversion": "npm run lint",
     "postversion": "git push && git push --tags && npm run changelog && git push ",
     "postinstall": "",
@@ -36,8 +36,17 @@
   "devDependencies": {
     "chai": "~1.10.0",
     "changelog": "^1.4.2",
+    "eslint": "^5.3.0",
+    "eslint-config-airbnb": "^17.1.0",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-config-prettier": "^4.1.0",
+    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-jsx-a11y": "^6.1.1",
+    "eslint-plugin-prettier": "^3.0.1",
+    "eslint-plugin-react": "^7.11.0",
     "jshint": "^2.9.3",
     "mocha": "^6.0.2",
+    "prettier": "^1.16.4",
     "rimraf": "^2.6.3"
   }
 }
